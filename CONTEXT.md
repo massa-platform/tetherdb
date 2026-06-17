@@ -55,6 +55,16 @@ Everything. No implementation has started. Awaiting first PRP and resolution of 
 
 ---
 
+## SESSION 2 — 2026-06-17 — SQL Server Connector Implementation — open
+
+Branch: claude/quirky-edison-kne9yf
+
+### WHAT WAS DONE
+
+(in progress)
+
+---
+
 ## NEXT SESSION START POINT
 
 Step 1: append a new session entry to CONTEXT.md with state `open` and the current branch name. Commit it before anything else.
