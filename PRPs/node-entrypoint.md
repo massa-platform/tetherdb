@@ -89,22 +89,32 @@ subscribe = ["orders", "customers", "products"]
 
 **Validation rules (checked at startup, before any connection):**
 
-| Field | Rule |
-|---|---|
-| `node.name` | non-empty, alphanumeric + hyphens only |
-| `node.data_dir` | non-empty string (existence not checked — created on first use) |
-| `listen.address` | valid `host:port` format |
-| `listen.tls_cert` / `tls_key` | non-empty; file existence checked at startup |
-| `management.address` | valid `host:port`; must not be `0.0.0.0:*` |
-| `connector.driver` | must be `"sqlserver"` (only supported driver in v1) |
-| `connector.host` | non-empty |
-| `connector.port` | 1–65535 (default 1433) |
-| `connector.auth` | `"sqlserver"` or `"windows"` |
-| `connector.username` | required when `auth = "sqlserver"` |
-| `connector.publish.tables` | at least one entry |
-| `connections[].name` | non-empty, unique across connections |
-| `connections[].address` | valid `host:port` |
-| `connections[].subscribe` | at least one entry; each must appear in `connector.publish.tables` |
+A node must have at least one of `[connector]` or `[listen]` — a config with neither is an error (the node would do nothing).
+
+| Field | Rule | Condition |
+|---|---|---|
+| `node.name` | non-empty, alphanumeric + hyphens only | always |
+| `node.data_dir` | non-empty string (existence not checked — created on first use) | always |
+| `listen.address` | valid `host:port` format | only if `[listen]` is present |
+| `listen.tls_cert` / `tls_key` | non-empty; file existence checked at startup | only if `[listen]` is present |
+| `management.address` | valid `host:port`; must not be `0.0.0.0:*` | always |
+| `connector.driver` | must be `"sqlserver"` (only supported driver in v1) | only if `[connector]` is present |
+| `connector.host` | non-empty | only if `[connector]` is present |
+| `connector.port` | 1–65535 (default 1433) | only if `[connector]` is present |
+| `connector.auth` | `"sqlserver"` or `"windows"` | only if `[connector]` is present |
+| `connector.username` | required when `auth = "sqlserver"` | only if `[connector]` is present |
+| `connector.publish.tables` | at least one entry | only if `[connector]` is present |
+| `connections[].name` | non-empty, unique across connections | only if `[[connections]]` entries exist |
+| `connections[].address` | valid `host:port` | only if `[[connections]]` entries exist |
+| `connections[].subscribe` | at least one entry; each must appear in `connector.publish.tables` | only if `[[connections]]` entries exist |
+| cross-section | `[[connections]]` requires `[connector]` — a node cannot forward changes it does not read | always |
+| cross-section | at least one of `[connector]` or `[listen]` must be present | always |
+
+This means three valid node shapes are possible:
+
+- **Source node** — has `[connector]` + `[[connections]]`, no `[listen]` required (dials out only)
+- **Sink node** — has `[listen]`, no `[connector]`, no `[[connections]]` (accepts inbound only)
+- **Relay node** — has both `[connector]` + `[[connections]]` + `[listen]` (reads, forwards, and accepts)
 
 Password is never logged. Management address must not bind to `0.0.0.0` — error if attempted.
 
@@ -117,8 +127,9 @@ Password is never logged. Management address must not bind to `0.0.0.0` — erro
 - Create `cmd/tetherdb/main.go` — entrypoint, flag parsing, subcommand dispatch
 - Create `internal/config/config.go` — Config struct, `Load(path string) (*Config, error)`, env var interpolation, validation
 - Register `kardianos/service` with the binary; route `install`/`uninstall`/`start`/`stop`/`run` through the service interface
-- The service `Start()` method: loads config, calls `sqlserver.New()` + `Probe()`, logs startup line, then blocks on a `context.Context` that is cancelled on `Stop()`
+- The service `Start()` method: loads config, calls `sqlserver.New()` + `Probe()` only when `[connector]` is present, logs startup line, then blocks on a `context.Context` that is cancelled on `Stop()`
 - If `Probe()` fails at startup, log the error and return it — do not start the service
+- If `[connector]` is absent (sink-only node), skip `Probe()` and proceed to blocking — the connector will be wired in a future PRP
 - Print help text (listing all subcommands and flags) when no arguments are provided
 - Inject version at build time via `-ldflags "-X main.version=v0.1.0"`; fall back to `"dev"`
 - Create `.github/workflows/release.yml` — triggers on push to `main`; builds `linux/amd64` and `windows/amd64` with `CGO_ENABLED=0`; strips debug info with `-ldflags="-s -w -X main.version=${VERSION}"`; uploads both binaries as workflow artifacts; version is derived from `git describe --tags --always --dirty`
@@ -181,7 +192,8 @@ All errors wrapped with `fmt.Errorf("config: <context>: %w", err)` or `fmt.Error
 
 All tests go in `internal/config/config_test.go`. No real filesystem or service manager required — tests use `t.TempDir()` for config files.
 
-- [ ] `TestLoad_ValidConfig` — a valid TOML file loads without error and all fields are populated correctly
+- [ ] `TestLoad_ValidSourceNode` — a full source-node TOML (connector + connections, no listen) loads without error
+- [ ] `TestLoad_ValidSinkNode` — a sink-node TOML (listen only, no connector, no connections) loads without error
 - [ ] `TestLoad_FileNotFound` — returns error when path does not exist
 - [ ] `TestLoad_InvalidTOML` — returns parse error for malformed TOML
 - [ ] `TestLoad_EnvVarInterpolation` — `${VAR}` in username/password fields is replaced with the env var value
@@ -192,6 +204,8 @@ All tests go in `internal/config/config_test.go`. No real filesystem or service 
 - [ ] `TestValidate_SubscribeNotPublished` — returns error when a connection subscribes to a table not in `connector.publish.tables`
 - [ ] `TestValidate_DuplicateConnectionName` — returns error when two connections share a name
 - [ ] `TestValidate_MissingTLSFiles` — returns error when cert or key path does not exist on disk
+- [ ] `TestValidate_ConnectionsWithoutConnector` — returns error when `[[connections]]` is present but `[connector]` is absent
+- [ ] `TestValidate_NeitherConnectorNorListen` — returns error when both `[connector]` and `[listen]` are absent
 
 ---
 
@@ -206,7 +220,7 @@ All tests go in `internal/config/config_test.go`. No real filesystem or service 
 ## ACCEPTANCE CRITERIA
 
 - [ ] `CGO_ENABLED=0 go build ./...` passes
-- [ ] `go test ./internal/config/...` passes — all 11 tests green
+- [ ] `go test ./internal/config/...` passes — all 13 tests green
 - [ ] `go vet ./...` passes
 - [ ] Running `./tetherdb` with no arguments prints help and exits 0
 - [ ] Running `./tetherdb --config missing.toml` exits non-zero with a clear error
