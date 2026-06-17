@@ -52,20 +52,17 @@ Rules:
 
 ### DECISION-003 — Supported database backends
 
-**Status:** open
+**Status:** resolved
 **Raised:** 2026-06-17 — Session 1
-**Resolved by:** human
-**Blocks:** Connection layer design, driver selection
+**Resolved:** 2026-06-17 — Session 1
 
 **Question:** Which database systems will tetherdb support at launch?
 
-**Options:**
-- A) PostgreSQL only — deepest feature set, WAL-based CDC, most capable; limits addressable use cases
-- B) PostgreSQL + MySQL/MariaDB — covers the majority of open-source RDBMS deployments
-- C) PostgreSQL + MySQL + SQLite — adds edge/local sync use case
-- D) Any database with a JDBC/ODBC driver — maximum reach, lowest common denominator feature set
+**Outcome:** Microsoft SQL Server (source) → PostgreSQL (target). SQL Server is the only supported source at launch. PostgreSQL is the only supported target. The architecture must be designed with a pluggable source connector interface so additional sources can be added later without restructuring.
 
-**Notes:** Starting narrower (option A or B) is almost always correct. A pluggable driver architecture can be designed from the start to allow expansion without the initial complexity.
+**Rationale:** User-specified. Narrow initial scope reduces driver complexity and allows deep feature coverage (SQL Server CDC via change tracking or CT/CDC features; Postgres as a well-understood write target).
+
+**Copied to MEMORY.md:** yes
 
 ---
 

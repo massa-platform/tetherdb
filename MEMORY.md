@@ -7,7 +7,13 @@ Read this at the start of every session before writing any code.
 
 ## ARCHITECTURAL DECISIONS
 
-No decisions have been resolved yet. All open questions are in DECISIONS.md.
+### 1. Source and target databases
+
+**Decision:** Microsoft SQL Server is the source database. PostgreSQL is the target. These are the only supported backends at launch.
+
+**Why:** User-specified initial scope. Keeping source and target narrow allows deep feature coverage (SQL Server change tracking/CDC; Postgres as a well-understood write target) before adding more connectors.
+
+**Rules out:** MySQL, SQLite, Oracle, MongoDB as sources or targets in v1. A pluggable connector interface must be designed so adding them later does not require restructuring the core engine.
 
 ---
 
