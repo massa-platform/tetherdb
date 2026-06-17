@@ -1,0 +1,35 @@
+# .llmignore
+# Files and directories the AI must never touch.
+# Keep in sync with the PROTECTED FILES section in CLAUDE.md.
+
+# Environment and secrets
+.env
+.env.*
+.env.local
+.env.production
+.env.development
+
+# Dependency lockfiles — managed by the package manager, not the AI
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+Cargo.lock
+go.sum
+go.work.sum
+
+# Database migration history — order is sacred, never regenerate
+migrations/
+*.migration.ts
+*.migration.js
+*.migration.sql
+
+# Build output — generated, not source
+dist/
+build/
+target/
+out/
+.next/
+bin/
+
+# License — never modify
+LICENSE
