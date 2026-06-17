@@ -111,6 +111,16 @@ Nothing from this PRP's scope. Next PRP should address the PostgreSQL Writer con
 
 ---
 
+## SESSION 3 — 2026-06-17 — Node Entrypoint, Config, Service, Release Workflow — open
+
+Branch: claude/quirky-edison-kne9yf
+
+### WHAT WAS DONE
+
+(in progress)
+
+---
+
 ## NEXT SESSION START POINT
 
 Step 1: append a new session entry to CONTEXT.md with state `open` and the current branch name. Commit it before anything else.
