@@ -148,9 +148,14 @@ See also: `.llmignore` at the project root.
 ## COMMANDS
 
 ```bash
-# Stack not yet chosen — commands will be filled in once DECISION-001 is resolved.
-# See DECISIONS.md.
+go build ./...          # build all binaries
+go test ./...           # run full test suite
+go vet ./...            # static analysis
+GOOS=windows GOARCH=amd64 go build ./cmd/tetherdb-source  # cross-compile source for Windows
+GOOS=linux   GOARCH=amd64 go build ./cmd/tetherdb-sink    # cross-compile sink for Linux
 ```
+
+CGO must remain off (`CGO_ENABLED=0`) to preserve static binary output. Never enable CGO.
 
 ---
 
@@ -158,21 +163,25 @@ See also: `.llmignore` at the project root.
 
 - **Project:** tetherdb — tether and sync databases
 - **License:** GPL v3
-- **Language/Runtime:** TBD — see DECISIONS.md DECISION-001
-- **Distribution:** TBD — see DECISIONS.md DECISION-004
+- **Language:** Go (CGO_ENABLED=0, static binary)
+- **Distribution:** Two daemons — `tetherdb-source` (SQL Server network) and `tetherdb-sink` (Postgres network)
+- **Service management:** `kardianos/service` — Windows Service, Linux systemd, macOS launchd
+- **SQL Server driver:** `go-mssqldb`
+- **PostgreSQL driver:** `pgx`
+- **WebSocket:** `gorilla/websocket`
+- **Transport:** WebSocket over TLS, port 443 (configurable), source dials sink
 
 ---
 
 ## ARCHITECTURE RULES
 
-Architecture is not yet decided. See DECISIONS.md for all open questions.
-
-Once DECISION-001 through DECISION-005 are resolved, this section will be populated with:
-- API/interface shape
-- Error handling approach
-- Where shared types live
-- Which layer connects to databases
-- Module boundaries
+- **Two binaries, two roles.** `tetherdb-source` reads from SQL Server and dials the sink. `tetherdb-sink` receives changes and writes to Postgres. They never swap roles.
+- **Source never imports Postgres drivers. Sink never imports SQL Server drivers.** Keep dependency surfaces minimal.
+- **ACK-gated cursor advance.** The source must not advance its SQL Server change cursor until it receives an ACK from the sink. This is the data-loss prevention invariant — never weaken it.
+- **Unidirectional only.** SQL Server → Postgres. No reverse sync. No bidirectional mode.
+- **Pluggable connector interface.** The source connector for SQL Server must be defined behind an interface so additional sources (MySQL, Oracle, etc.) can be added later without changing the core engine.
+- **Local HTTP management API.** Each daemon exposes status, manual trigger, and log endpoints on localhost:8080 (configurable). Never bind to 0.0.0.0 by default.
+- **All connection config from file or environment.** No hardcoded hosts, ports, or credentials anywhere.
 
 ---
 
@@ -180,20 +189,30 @@ Once DECISION-001 through DECISION-005 are resolved, this section will be popula
 
 This project uses **return-based error handling**. Do not throw exceptions for expected failures.
 
-The exact type signature depends on DECISION-001 (language choice), but the principle is universal:
+Go idiomatic `(T, error)` returns throughout. Custom error types wrap driver errors to add domain context.
 
+```go
+// Expected failure → return error, caller must handle
+func (r *Reader) ReadBatch(ctx context.Context) ([]Change, error) {
+    rows, err := r.db.QueryContext(ctx, ...)
+    if err != nil {
+        return nil, fmt.Errorf("ReadBatch: query failed: %w", err)
+    }
+    ...
+}
+
+// Caller handles explicitly — no hidden control flow
+batch, err := reader.ReadBatch(ctx)
+if err != nil {
+    return fmt.Errorf("sync cycle: %w", err)
+}
 ```
-Expected failure  →  return an error value the caller must handle
-Truly unexpected  →  let it propagate (programmer error, unrecoverable state)
-```
 
-Once the language is chosen, specific Result/Either/error-return patterns will be documented here.
-
-Anti-patterns (language-agnostic):
-- Never use exceptions/panics for expected failures (connection refused, table not found, auth failed)
-- Never return null/nil/undefined to signal failure — the caller cannot distinguish "not found" from "returned nothing"
-- Never expose raw library error messages to callers — wrap them in domain error types
-- Never swallow errors silently
+Anti-patterns:
+- Never panic for expected failures (connection refused, table not found, auth failed)
+- Never return nil error when something actually went wrong
+- Never expose raw driver error messages to callers — wrap with `fmt.Errorf("context: %w", err)`
+- Never swallow errors silently (`_ = someCall()` is forbidden except in deferred closes)
 
 ---
 
