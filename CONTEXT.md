@@ -111,11 +111,64 @@ Nothing from this PRP's scope. Next PRP should address the PostgreSQL Writer con
 
 ---
 
+## SESSION 3 — 2026-06-17 — Node Entrypoint, Config, Service, Release Workflow — closed
+
+Branch: claude/quirky-edison-kne9yf
+
+### WHAT WAS DONE
+
+Implemented the node entrypoint, config loader, service wrapper, and GitHub Actions release
+workflow per PRP node-entrypoint.md. All 13 config tests pass. Binary builds clean with
+CGO_ENABLED=0. Help, version, and missing-config error paths all verified manually.
+
+Also addressed the sink-only node edge case: [connector] is now optional; validation
+enforces three valid shapes (source, sink, relay) with cross-section rules.
+
+### FILES CREATED OR MODIFIED
+
+cmd/tetherdb/main.go                    — entrypoint, flag parsing, subcommand dispatch, service wiring
+internal/config/config.go              — Config struct, Load(), interpolate(), Validate(), helper methods
+internal/config/config_test.go         — 13 unit tests (all passing)
+.github/workflows/release.yml          — build linux/amd64 + windows/amd64 on push to main
+PRPs/node-entrypoint.md                — updated to address sink-only edge case (2 new tests, cross-section rules)
+
+### TESTS WRITTEN
+
+- TestLoad_ValidSourceNode
+- TestLoad_ValidSinkNode
+- TestLoad_FileNotFound
+- TestLoad_InvalidTOML
+- TestLoad_EnvVarInterpolation
+- TestLoad_EnvVarMissing
+- TestValidate_MissingNodeName
+- TestValidate_InvalidManagementAddress
+- TestValidate_UnknownDriver
+- TestValidate_SubscribeNotPublished
+- TestValidate_DuplicateConnectionName
+- TestValidate_MissingTLSFiles
+- TestValidate_ConnectionsWithoutConnector
+- TestValidate_NeitherConnectorNorListen
+
+### DECISIONS MADE
+
+None new.
+
+### STILL OPEN AT CLOSE
+
+Nothing from this PRP's scope. Pipeline engine, transport, state layer, Postgres Writer,
+and management API are all future PRPs per the spec's implementation plan (steps 2–10).
+
+---
+
 ## NEXT SESSION START POINT
 
 Step 1: append a new session entry to CONTEXT.md with state `open` and the current branch name. Commit it before anything else.
 
 Then read CLAUDE.md, MEMORY.md, DECISIONS.md in that order.
 
-The SQL Server connector (Reader) is complete on branch `claude/quirky-edison-kne9yf`.
-Next feature to build is the PostgreSQL Writer connector — write a PRP first.
+Completed so far (all on branch claude/quirky-edison-kne9yf, PR #2):
+- SQL Server connector (Reader) — internal/connector/sqlserver/
+- Node entrypoint + config loader + service wrapper — cmd/tetherdb/, internal/config/
+- GitHub Actions release workflow — .github/workflows/release.yml
+
+Next feature: PostgreSQL Writer connector (spec §5.5, implementation plan step 2). Write a PRP first.
