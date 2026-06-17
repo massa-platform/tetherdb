@@ -55,13 +55,59 @@ Everything. No implementation has started. Awaiting first PRP and resolution of 
 
 ---
 
-## SESSION 2 — 2026-06-17 — SQL Server Connector Implementation — open
+## SESSION 2 — 2026-06-17 — SQL Server Connector Implementation — closed
 
 Branch: claude/quirky-edison-kne9yf
 
 ### WHAT WAS DONE
 
-(in progress)
+Implemented the SQL Server connector (Reader) per PRP sqlserver-connector.md. Initialised
+go.mod as `github.com/massa-platform/tetherdb`. Created the shared connector interface
+package and the full sqlserver connector package with CDC and Change Tracking support.
+All 12 PRP-specified tests pass. `go build ./...`, `go test ./internal/connector/...`,
+and `go vet ./...` all pass clean with CGO_ENABLED=0.
+
+### FILES CREATED OR MODIFIED
+
+go.mod                                         — module init, go-mssqldb dependency
+internal/connector/connector.go                — Op, Change, Row, InitialCursor, ChangeCursor, RowStream, ChangeStream, Reader, Writer
+internal/connector/sqlserver/errors.go         — ConnectorError, ErrorKind, connErr helper
+internal/connector/sqlserver/querier.go        — querier interface, dbQuerier adapter, namedArg helper
+internal/connector/sqlserver/sqlserver.go      — Config, Connector struct, New(), Close(), validateConfig, buildDSN, retryWithBackoff
+internal/connector/sqlserver/probe.go          — Probe(), tableExists, detectMechanism, isCDCEnabled, isCTEnabled, splitTable
+internal/connector/sqlserver/initialsync.go    — InitialSync(), rowStream, primaryKeyColumns, scanTable
+internal/connector/sqlserver/changes.go        — Changes(), changeStream, fetchCDC, fetchCT, CDC/CT scan helpers
+internal/connector/sqlserver/sqlserver_test.go — 12 unit tests (fakeQuerier-based, no real DB required)
+
+### TESTS WRITTEN
+
+- TestProbe_MissingTable
+- TestProbe_NoCDCNoCT
+- TestProbe_PrefersCDCOverCT
+- TestProbe_FallsBackToCT
+- TestInitialSync_EmptyTable
+- TestInitialSync_FullTable
+- TestInitialSync_ResumesFromCursor
+- TestChanges_Insert
+- TestChanges_Update
+- TestChanges_Delete
+- TestChanges_CursorAdvances
+- TestProbe_RedactsPasswordInLogs
+
+### DECISIONS MADE
+
+None new — all architectural decisions were already resolved in Session 1.
+
+### KNOWN LIMITATIONS (not scope of this PRP)
+
+- CT fetchCTForTable join ON clause uses a placeholder — real PK-join requires knowing
+  the PK columns at query time. Integration test required to validate.
+- CDC before-image (op=3) is skipped; Update changes carry After only for now.
+- Multi-column PK resume in InitialSync uses single-column fast path only.
+
+### STILL OPEN AT CLOSE
+
+Nothing from this PRP's scope. Next PRP should address the PostgreSQL Writer connector.
 
 ---
 
@@ -71,4 +117,5 @@ Step 1: append a new session entry to CONTEXT.md with state `open` and the curre
 
 Then read CLAUDE.md, MEMORY.md, DECISIONS.md in that order.
 
-Before writing any code: resolve DECISION-001 (language/runtime) and DECISION-004 (distribution model) with the user — these block all other work. Then write the first PRP for whatever feature is being built.
+The SQL Server connector (Reader) is complete on branch `claude/quirky-edison-kne9yf`.
+Next feature to build is the PostgreSQL Writer connector — write a PRP first.
