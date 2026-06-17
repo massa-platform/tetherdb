@@ -18,6 +18,20 @@ No open decisions — all architectural questions resolved or deferred.
 
 ## DEFERRED — Acknowledged, not yet needed
 
+### DECISION-008 — Config management and distribution
+
+**Status:** deferred
+**Raised:** 2026-06-17 — Session 1
+**Revisit when:** Node engine (pipeline wiring, management API) is being designed
+
+**Question:** How are config changes propagated across the node network?
+
+**Outcome so far:** Each node holds a local TOML as its baseline. Since WebSocket connections are already bidirectional, any node can relay config changes to connected nodes over the existing data channel — no dedicated config server or separate control channel needed. An operator talks to any reachable node via its local HTTP management API; that node forwards the change to its peers over existing connections; each receiving node persists the change locally and hot-reloads.
+
+**Still to decide:** Whether config changes require acknowledgement from all receiving nodes (reliable delivery) or are fire-and-forget. Defer until the node engine message protocol is being designed.
+
+---
+
 ### DECISION-006 — Conflict resolution strategy
 
 **Status:** deferred
