@@ -151,8 +151,8 @@ See also: `.llmignore` at the project root.
 go build ./...          # build all binaries
 go test ./...           # run full test suite
 go vet ./...            # static analysis
-GOOS=windows GOARCH=amd64 go build ./cmd/tetherdb-source  # cross-compile source for Windows
-GOOS=linux   GOARCH=amd64 go build ./cmd/tetherdb-sink    # cross-compile sink for Linux
+GOOS=windows GOARCH=amd64 go build ./cmd/tetherdb  # cross-compile for Windows
+GOOS=linux   GOARCH=amd64 go build ./cmd/tetherdb  # cross-compile for Linux
 ```
 
 CGO must remain off (`CGO_ENABLED=0`) to preserve static binary output. Never enable CGO.
@@ -161,26 +161,30 @@ CGO must remain off (`CGO_ENABLED=0`) to preserve static binary output. Never en
 
 ## STACK
 
-- **Project:** tetherdb — tether and sync databases
+- **Project:** tetherdb — a data mesh network for database synchronisation
 - **License:** GPL v3
 - **Language:** Go (CGO_ENABLED=0, static binary)
-- **Distribution:** Two daemons — `tetherdb-source` (SQL Server network) and `tetherdb-sink` (Postgres network)
+- **Distribution:** Single binary `tetherdb` — runs as a node in a sync network
 - **Service management:** `kardianos/service` — Windows Service, Linux systemd, macOS launchd
 - **SQL Server driver:** `go-mssqldb`
 - **PostgreSQL driver:** `pgx`
 - **WebSocket:** `gorilla/websocket`
-- **Transport:** WebSocket over TLS, port 443 (configurable), source dials sink
+- **State:** SQLite via `modernc.org/sqlite` (pure Go, CGO-free)
+- **Transport:** WebSocket over TLS, port 443 (configurable), connecting node dials receiving node
+- **Config:** TOML
 
 ---
 
 ## ARCHITECTURE RULES
 
-- **Two binaries, two roles.** `tetherdb-source` reads from SQL Server and dials the sink. `tetherdb-sink` receives changes and writes to Postgres. They never swap roles.
-- **Source never imports Postgres drivers. Sink never imports SQL Server drivers.** Keep dependency surfaces minimal.
-- **ACK-gated cursor advance.** The source must not advance its SQL Server change cursor until it receives an ACK from the sink. This is the data-loss prevention invariant — never weaken it.
-- **Unidirectional only.** SQL Server → Postgres. No reverse sync. No bidirectional mode.
-- **Pluggable connector interface.** The source connector for SQL Server must be defined behind an interface so additional sources (MySQL, Oracle, etc.) can be added later without changing the core engine.
-- **Local HTTP management API.** Each daemon exposes status, manual trigger, and log endpoints on localhost:8080 (configurable). Never bind to 0.0.0.0 by default.
+- **One binary, one role: node.** tetherdb is a single binary. Every deployment is a node. A node can read from a database, write to a database, forward changes to other nodes, receive changes from other nodes, or any combination. There is no separate source binary and sink binary.
+- **The sync engine never imports a database driver.** All database access goes through the `Reader` and `Writer` connector interfaces. Only the connector packages import drivers.
+- **Source never imports Postgres drivers. Sink connector never imports SQL Server drivers.** Each connector package imports only its own driver.
+- **ACK-gated cursor advance.** A node must not advance its change cursor until it receives an ACK from the downstream node. This is the data-loss prevention invariant — never weaken it.
+- **Unidirectional per connection.** Each node-to-node connection carries changes in one direction only. Bidirectional sync requires two connections.
+- **Source publishes; sinks subscribe.** A node's connector declares which tables it publishes. Each outbound connection declares which tables it subscribes to. A connection subscribing to an unpublished table is a startup error.
+- **Per-connection, per-table cursors.** State is keyed by `(connection_name, table)`. Each connection advances independently.
+- **Local HTTP management API.** Each node exposes status, manual trigger, and log endpoints on localhost:8080 (configurable). Never bind to 0.0.0.0 by default.
 - **All connection config from file or environment.** No hardcoded hosts, ports, or credentials anywhere.
 
 ---
@@ -238,7 +242,7 @@ tetherdb/
 │   │   └── constraints/
 │   ├── CODE_STYLE.md
 │   └── specs/
-└── [src/ — structure TBD after DECISION-001]
+└── [src/ — structure TBD after first PRP]
 ```
 
 ---
@@ -250,6 +254,8 @@ tetherdb/
 3. **Never hardcode a database port, host, or credential.** All connection config must come from environment or config file.
 4. **Never treat a failed sync as a no-op.** Every failed sync must be surfaced to the caller with enough detail to diagnose the failure.
 5. **Never make an architectural choice silently.** Open DECISIONS.md first.
+6. **Never import a database driver outside its connector package.** The sync engine is database-agnostic. Drivers belong only in `internal/connector/sqlserver` and `internal/connector/postgres`.
+7. **Never advance a cursor before receiving an ACK.** This is the data-loss prevention invariant.
 
 ---
 

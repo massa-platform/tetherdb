@@ -100,9 +100,11 @@ No open decisions — all architectural questions resolved or deferred.
 
 **Question:** How is tetherdb distributed and consumed?
 
-**Outcome:** Two standalone daemons — `tetherdb-source` and `tetherdb-sink` — each a single static Go binary. Deployed as a Windows Service, Linux systemd unit, or Docker container via `kardianos/service`. Each agent exposes a local HTTP management API on localhost only (default port 8080) for status, manual trigger, and log access. No relay, no cloud component.
+**Outcome:** ~~Two standalone daemons~~ — superseded by the network node model (2026-06-17).
 
-**Rationale:** Databases are on private networks; a self-hosted daemon is the only viable model. Two separate binaries keeps each agent's dependency surface minimal — the source binary never needs a Postgres driver; the sink binary never needs a SQL Server driver.
+**Superseded outcome:** tetherdb is a single binary (`tetherdb`) that acts as a **node** in a directed sync network. A node can read from a database, write to a database, receive changes from upstream nodes, forward changes to downstream nodes, or any combination. The topology is a directed graph defined entirely in TOML configuration. No relay, no cloud component. Deployed as Windows Service, Linux systemd unit, or Docker container via `kardianos/service`. Each node exposes a local HTTP management API on localhost (default :8080).
+
+**Rationale:** The two-binary model cannot support many-to-one, one-to-many, or chained sync topologies without code changes. The node model makes all topologies fall out from configuration. Connector packages remain isolated — the SQL Server connector never imports a Postgres driver and vice versa.
 
 **Copied to MEMORY.md:** yes
 
