@@ -83,6 +83,8 @@ Rules:
 
 **Notes:** This determines whether tetherdb has a public API surface (library), a network protocol (daemon), or a CLI interface. Each implies a very different architecture. Option D is common for mature tools but is a larger scope.
 
+**Constraint from docs/source/constraints/private-network-access.md:** Databases run on private networks — SQL Server port is typically closed to the internet. tetherdb must run inside the customer's private network and connect outward to both databases. This rules out any architecture that requires the tool to be reachable from outside (e.g., a cloud-hosted service that pulls from a customer DB). A self-hosted daemon or CLI tool deployed on-prem or on the customer's VPN is the only viable model.
+
 ---
 
 ### DECISION-005 — Error handling strategy
