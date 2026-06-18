@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/url"
 	"time"
 
 	_ "github.com/microsoft/go-mssqldb" // registers the "sqlserver" driver
@@ -147,11 +148,10 @@ func validateConfig(cfg Config) error {
 
 // buildDSN constructs the mssqldb connection string with the password redacted in logs.
 //
-// Named instances (cfg.Instance != "") use SQL Server Browser dynamic port negotiation —
-// the instance name is passed as a query parameter and Port is omitted from the DSN.
-// Default instances use an explicit port (defaulting to 1433).
+// Credentials are URL-encoded to handle special characters (!, @, #, etc).
+// Named instances use SQL Server Browser dynamic port negotiation via ?instance=.
 func buildDSN(cfg Config) string {
-	// Build the redacted DSN for logging — never include the password.
+	// Log the redacted DSN — never include the password.
 	redacted := fmt.Sprintf("sqlserver://%s@%s", cfg.User, cfg.Host)
 	if cfg.Instance != "" {
 		redacted += `\` + cfg.Instance
@@ -159,26 +159,40 @@ func buildDSN(cfg Config) string {
 	redacted += "/" + cfg.Database
 	slog.Default().Info("sqlserver: connecting", "dsn", redacted)
 
+	q := url.Values{}
+	q.Set("database", cfg.Database)
 	if cfg.Instance != "" {
-		// Named instance: omit port, pass instance via query param.
-		if cfg.Auth == "windows" {
-			return fmt.Sprintf("sqlserver://%s?database=%s&instance=%s&integrated+security=true",
-				cfg.Host, cfg.Database, cfg.Instance)
-		}
-		return fmt.Sprintf("sqlserver://%s:%s@%s?database=%s&instance=%s",
-			cfg.User, cfg.Password, cfg.Host, cfg.Database, cfg.Instance)
+		q.Set("instance", cfg.Instance)
 	}
 
-	port := cfg.Port
-	if port == 0 {
-		port = 1433
-	}
 	if cfg.Auth == "windows" {
-		return fmt.Sprintf("sqlserver://%s:%d?database=%s&integrated+security=true",
-			cfg.Host, port, cfg.Database)
+		u := &url.URL{Scheme: "sqlserver", Host: cfg.Host, RawQuery: q.Encode()}
+		if cfg.Instance == "" {
+			port := cfg.Port
+			if port == 0 {
+				port = 1433
+			}
+			u.Host = fmt.Sprintf("%s:%d", cfg.Host, port)
+		}
+		q.Set("integrated security", "true")
+		u.RawQuery = q.Encode()
+		return u.String()
 	}
-	return fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s",
-		cfg.User, cfg.Password, cfg.Host, port, cfg.Database)
+
+	u := &url.URL{
+		Scheme:   "sqlserver",
+		User:     url.UserPassword(cfg.User, cfg.Password),
+		Host:     cfg.Host,
+		RawQuery: q.Encode(),
+	}
+	if cfg.Instance == "" {
+		port := cfg.Port
+		if port == 0 {
+			port = 1433
+		}
+		u.Host = fmt.Sprintf("%s:%d", cfg.Host, port)
+	}
+	return u.String()
 }
 
 // retryWithBackoff runs fn, retrying on error with exponential backoff.
