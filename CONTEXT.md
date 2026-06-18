@@ -243,13 +243,57 @@ None new.
 
 ---
 
-## SESSION 6 — 2026-06-18 — PostgreSQL Writer Connector — open
+## SESSION 6 — 2026-06-18 — PostgreSQL Writer Connector — closed
 
 Branch: claude/intelligent-archimedes-r0iia8
 
 ### WHAT WAS DONE
 
-Implementing the PostgreSQL Writer connector per PRPs/postgres-writer.md (approved PRP).
+Implemented the PostgreSQL Writer connector per PRPs/postgres-writer.md (approved PRP).
+All 12 PRP-specified tests pass. `go build ./...`, `go test ./...`, and `go vet ./...`
+all pass clean with CGO_ENABLED=0.
+
+Added pgx/v5 + pgxpool dependency. Connector satisfies `connector.Writer` interface
+verified at compile time via `var _ connector.Writer = (*Connector)(nil)`.
+
+`cmd/tetherdb/main.go` probes the sink at startup if `[sink]` is present in TOML.
+No data flows yet — phase 1 is connector-only per PRP scope.
+
+### FILES CREATED OR MODIFIED
+
+internal/connector/postgres/errors.go      — ConnectorError, ErrorKind, connErr helper
+internal/connector/postgres/postgres.go    — Config, dbPool/dbTx interfaces, Connector, New(), Close(), Probe(), Apply(), buildDSN, validateConfig
+internal/connector/postgres/apply.go       — applyBatch(), execUpsert(), execDelete(), quoteIdent(), quoteTable(), sortedKeys()
+internal/connector/postgres/postgres_test.go — 12 unit tests (fakePool/fakeTx, no real DB required)
+internal/config/config.go                 — SinkConfig struct, Sink field on Config, validateSink(), HasSink(), SinkPassword(), RedactedSinkDSN()
+cmd/tetherdb/main.go                       — sink probe in program.Start() when cfg.HasSink()
+go.mod / go.sum                            — github.com/jackc/pgx/v5 v5.10.0 added
+
+### TESTS WRITTEN
+
+- TestProbe_Success
+- TestProbe_ConnectionFailure
+- TestApply_Insert
+- TestApply_Update
+- TestApply_Delete
+- TestApply_DeleteMissingRow
+- TestApply_BatchTransaction
+- TestApply_RollbackOnError
+- TestApply_CompositePK
+- TestApply_SpecialCharsInPassword
+- TestConfig_ExplicitFields
+- TestConfig_RawDSN
+
+### DECISIONS MADE
+
+None new.
+
+### STILL OPEN AT CLOSE
+
+- DECISION-009 (open): Probe() table existence check — deferred to post-phase-1.
+- DECISION-010 (open): Schema sync / auto-create tables — deferred.
+- Transport (WebSocket), pipeline engine wiring, ACK protocol, SQLite state layer,
+  management API sink status endpoint — all future PRPs.
 
 ---
 
@@ -259,10 +303,12 @@ Step 1: append a new session entry to CONTEXT.md with state `open` and the curre
 
 Then read CLAUDE.md, MEMORY.md, DECISIONS.md in that order.
 
-Completed so far (all on branch claude/quirky-edison-kne9yf):
-- SQL Server connector (Reader) — internal/connector/sqlserver/
-- Node entrypoint + config loader + service wrapper — cmd/tetherdb/, internal/config/
-- GitHub Actions release workflow — .github/workflows/release.yml
-- Named SQL Server instance + URL encoding fix — production node running on SRV01-MTA
+Completed so far:
+- SQL Server connector (Reader) — internal/connector/sqlserver/ [claude/quirky-edison-kne9yf]
+- Node entrypoint + config loader + service wrapper — cmd/tetherdb/, internal/config/ [claude/quirky-edison-kne9yf]
+- GitHub Actions release workflow — .github/workflows/release.yml [claude/quirky-edison-kne9yf]
+- Named SQL Server instance + URL encoding fix — production node running on SRV01-MTA [claude/quirky-edison-kne9yf]
+- PostgreSQL Writer connector (Writer) — internal/connector/postgres/ [claude/intelligent-archimedes-r0iia8]
 
-Next feature: PostgreSQL Writer connector (spec §5.5, implementation plan step 2). Write a PRP first.
+Next: transport layer (WebSocket over TLS), pipeline engine wiring (Reader → Writer),
+ACK protocol, SQLite state layer, management API. Each requires its own PRP.
