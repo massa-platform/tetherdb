@@ -160,6 +160,12 @@ and management API are all future PRPs per the spec's implementation plan (steps
 
 ---
 
+## SESSION 4 — 2026-06-18 — Named SQL Server Instance Fix — open
+
+Branch: claude/quirky-edison-kne9yf
+
+---
+
 ## NEXT SESSION START POINT
 
 Step 1: append a new session entry to CONTEXT.md with state `open` and the current branch name. Commit it before anything else.
