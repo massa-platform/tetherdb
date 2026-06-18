@@ -297,6 +297,16 @@ None new.
 
 ---
 
+## SESSION 7 — 2026-06-18 — Docker + Traefik Deployment — open
+
+Branch: claude/intelligent-archimedes-r0iia8
+
+### WHAT WAS DONE
+
+Implementing Docker + Traefik deployment per PRPs/docker-traefik-deployment.md (approved PRP).
+
+---
+
 ## NEXT SESSION START POINT
 
 Step 1: append a new session entry to CONTEXT.md with state `open` and the current branch name. Commit it before anything else.
