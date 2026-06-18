@@ -198,16 +198,61 @@ Then download the new binary from the next release tag or CI artifact and replac
 
 ---
 
+---
+
+## SESSION 5 — 2026-06-18 — Production Bring-Up & DSN Fixes — closed
+
+Branch: claude/quirky-edison-kne9yf
+
+### WHAT WAS DONE
+
+Brought up the tetherdb node on the production SQL Server machine (SRV01-MTA\PRIMAVERAV10).
+Fixed three layered bugs discovered during live testing:
+
+1. **Named instance DSN** — `buildDSN` produced invalid URL when host contained `\INSTANCE`.
+   Fixed by adding `Instance` field to `Config`/`ConnectorConfig` and using `?instance=` query param.
+
+2. **Version injection** — CI was injecting `v0.1.2` for all releases because multiple tags
+   pointed to the same commit and `git describe` returned the alphabetically first one.
+   Fixed by using `GITHUB_REF_NAME` directly when triggered by a tag push.
+
+3. **Password URL encoding** — `AdminMeta!` contains `!` which broke the URL parser when
+   embedded raw in the DSN. Fixed by using `url.UserPassword()` and `url.Values` to properly
+   encode credentials.
+
+Node is now running on SRV01-MTA with Change Tracking on PRIMTA2021/dbo.CNO_Inventario.
+Probe log: `sqlserver: probe succeeded host=SRV01-MTA database=PRIMTA2021 mechanism="Change Tracking"`
+
+### FILES CREATED OR MODIFIED
+
+internal/connector/sqlserver/sqlserver.go  — URL-encoded DSN via net/url, Instance support, GITHUB_REF_NAME version fix
+internal/config/config.go                  — Instance field in ConnectorConfig
+cmd/tetherdb/main.go                       — Instance passed through
+.github/workflows/release.yml             — Use GITHUB_REF_NAME for tag builds
+
+### DECISIONS MADE
+
+None new.
+
+### STILL OPEN AT CLOSE
+
+- Node is running in foreground only. Next step: install as Windows Service (`tetherdb install`).
+- Change Tracking is enabled on dbo.CNO_Inventario only. Enable on other tables as needed.
+- Pipeline engine (transport to PostgreSQL sink) is not yet built — node reads changes but
+  has nowhere to send them yet. That requires the PostgreSQL Writer PRP (step 2 of impl plan).
+
+---
+
 ## NEXT SESSION START POINT
 
 Step 1: append a new session entry to CONTEXT.md with state `open` and the current branch name. Commit it before anything else.
 
 Then read CLAUDE.md, MEMORY.md, DECISIONS.md in that order.
 
-Completed so far (all on branch claude/quirky-edison-kne9yf, PR #2):
+Completed so far (all on branch claude/quirky-edison-kne9yf):
 - SQL Server connector (Reader) — internal/connector/sqlserver/
 - Node entrypoint + config loader + service wrapper — cmd/tetherdb/, internal/config/
 - GitHub Actions release workflow — .github/workflows/release.yml
-- Named SQL Server instance fix — internal/connector/sqlserver/sqlserver.go, internal/config/config.go
+- Named SQL Server instance + URL encoding fix — production node running on SRV01-MTA
 
 Next feature: PostgreSQL Writer connector (spec §5.5, implementation plan step 2). Write a PRP first.
