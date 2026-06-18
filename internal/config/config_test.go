@@ -403,6 +403,97 @@ subscribe = ["orders"]
 	}
 }
 
+func TestValidate_ListenNoTLS(t *testing.T) {
+	// No tls_cert/tls_key → valid; Traefik terminates TLS externally.
+	content := `
+[node]
+name     = "sink"
+data_dir = "/tmp"
+
+[management]
+address = "127.0.0.1:8080"
+
+[listen]
+address = "0.0.0.0:8443"
+`
+	_, err := Load(writeConfig(t, content))
+	if err != nil {
+		t.Fatalf("expected valid config with no TLS files, got: %v", err)
+	}
+}
+
+func TestValidate_ListenPartialTLS(t *testing.T) {
+	// tls_cert set but tls_key empty → error.
+	_, key := writeCerts(t)
+	_ = key
+	cert, _ := writeCerts(t)
+	content := `
+[node]
+name     = "sink"
+data_dir = "/tmp"
+
+[management]
+address = "127.0.0.1:8080"
+
+[listen]
+address  = "0.0.0.0:8443"
+tls_cert = "` + cert + `"
+`
+	_, err := Load(writeConfig(t, content))
+	if err == nil {
+		t.Fatal("expected error when tls_cert is set but tls_key is empty")
+	}
+	if !strings.Contains(err.Error(), "tls_key") {
+		t.Errorf("error should mention tls_key, got: %v", err)
+	}
+}
+
+func TestValidate_ListenPartialTLSReverse(t *testing.T) {
+	// tls_key set but tls_cert empty → error.
+	_, key := writeCerts(t)
+	content := `
+[node]
+name     = "sink"
+data_dir = "/tmp"
+
+[management]
+address = "127.0.0.1:8080"
+
+[listen]
+address  = "0.0.0.0:8443"
+tls_key  = "` + key + `"
+`
+	_, err := Load(writeConfig(t, content))
+	if err == nil {
+		t.Fatal("expected error when tls_key is set but tls_cert is empty")
+	}
+	if !strings.Contains(err.Error(), "tls_cert") {
+		t.Errorf("error should mention tls_cert, got: %v", err)
+	}
+}
+
+func TestValidate_ListenBothTLS(t *testing.T) {
+	// Both cert and key present → valid (existing behaviour preserved).
+	cert, key := writeCerts(t)
+	content := `
+[node]
+name     = "sink"
+data_dir = "/tmp"
+
+[management]
+address = "127.0.0.1:8080"
+
+[listen]
+address  = "0.0.0.0:443"
+tls_cert = "` + cert + `"
+tls_key  = "` + key + `"
+`
+	_, err := Load(writeConfig(t, content))
+	if err != nil {
+		t.Fatalf("expected valid config with both TLS files, got: %v", err)
+	}
+}
+
 func TestValidate_NeitherConnectorNorListen(t *testing.T) {
 	content := `
 [node]

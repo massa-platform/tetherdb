@@ -297,13 +297,42 @@ None new.
 
 ---
 
-## SESSION 7 — 2026-06-18 — Docker + Traefik Deployment — open
+## SESSION 7 — 2026-06-18 — Docker + Traefik Deployment — closed
 
 Branch: claude/intelligent-archimedes-r0iia8
 
 ### WHAT WAS DONE
 
-Implementing Docker + Traefik deployment per PRPs/docker-traefik-deployment.md (approved PRP).
+Implemented Docker + Traefik deployment per PRPs/docker-traefik-deployment.md (approved PRP).
+All tests pass. Build clean. 4 new config tests cover no-TLS, partial-TLS, and full-TLS listen modes.
+
+### FILES CREATED OR MODIFIED
+
+Dockerfile                          — two-stage scratch build; copies ca-certificates for Postgres TLS
+docker-compose.yml                  — traefik + tetherdb + postgres; internal Docker network; healthcheck on postgres
+traefik/traefik.yml                 — static config: entrypoints, Let's Encrypt ACME via HTTP challenge
+traefik/acme.json                   — empty placeholder (chmod 600, gitignored)
+config/tetherdb-sink.toml           — sink node config: no TLS files, Traefik terminates, postgres via Docker service name
+.env.example                        — PG_USER / PG_PASS / PG_DB placeholders
+.gitignore                          — excludes .env and traefik/acme.json
+internal/config/config.go           — validateListen: both empty = no-TLS mode; partial = error
+internal/config/config_test.go      — 4 new tests: ListenNoTLS, ListenPartialTLS, ListenPartialTLSReverse, ListenBothTLS
+
+### TESTS WRITTEN
+
+- TestValidate_ListenNoTLS
+- TestValidate_ListenPartialTLS
+- TestValidate_ListenPartialTLSReverse
+- TestValidate_ListenBothTLS
+
+### DECISIONS MADE
+
+None new. DECISION-011 (data_dir persistence) remains open — deferred to first production deploy.
+
+### STILL OPEN AT CLOSE
+
+- DECISION-011: data_dir Docker volume vs ephemeral — deferred.
+- Transport (WebSocket listener), pipeline engine, ACK protocol — future PRPs.
 
 ---
 
@@ -320,5 +349,10 @@ Completed so far:
 - Named SQL Server instance + URL encoding fix — production node running on SRV01-MTA [claude/quirky-edison-kne9yf]
 - PostgreSQL Writer connector (Writer) — internal/connector/postgres/ [claude/intelligent-archimedes-r0iia8]
 
-Next: transport layer (WebSocket over TLS), pipeline engine wiring (Reader → Writer),
+Next: transport layer (WebSocket listener + dialer), pipeline engine wiring (Reader → Writer),
 ACK protocol, SQLite state layer, management API. Each requires its own PRP.
+
+To deploy the sink:
+1. Copy .env.example to .env and fill in credentials.
+2. Ensure DNS for tetherdb.dafifi.net points at the server.
+3. docker compose up -d

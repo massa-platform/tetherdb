@@ -252,11 +252,16 @@ func validateListen(l ListenConfig) error {
 	if _, _, err := net.SplitHostPort(l.Address); err != nil {
 		return fmt.Errorf("config: listen.address %q is not a valid host:port: %w", l.Address, err)
 	}
+	// Both empty → no-TLS mode; Traefik (or similar) terminates TLS upstream.
+	if l.TLSCert == "" && l.TLSKey == "" {
+		return nil
+	}
+	// Partial TLS config is always an error.
 	if l.TLSCert == "" {
-		return fmt.Errorf("config: listen.tls_cert must not be empty")
+		return fmt.Errorf("config: listen.tls_cert must not be empty when listen.tls_key is set")
 	}
 	if l.TLSKey == "" {
-		return fmt.Errorf("config: listen.tls_key must not be empty")
+		return fmt.Errorf("config: listen.tls_key must not be empty when listen.tls_cert is set")
 	}
 	if _, err := os.Stat(l.TLSCert); err != nil {
 		return fmt.Errorf("config: listen.tls_cert %q not found: %w", l.TLSCert, err)
