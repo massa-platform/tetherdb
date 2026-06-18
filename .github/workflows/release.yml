@@ -37,7 +37,7 @@ jobs:
       - name: Derive version
         id: version
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+          if [[  "${GITHUB_REF}" == refs/tags/* ]]; then
             echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           else
             echo "version=$(git describe --tags --always --dirty)" >> "$GITHUB_OUTPUT"
