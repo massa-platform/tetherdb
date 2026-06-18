@@ -13,7 +13,7 @@ services:
       - web
 
   tetherdb:
-    build: .
+    image: ghcr.io/massa-platform/tetherdb:latest
     restart: unless-stopped
     environment:
       PG_USER: ${PG_USER}

@@ -1,8 +1,9 @@
 FROM golang:1.25 AS builder
 WORKDIR /src
 COPY . .
+ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags "-X main.version=$(git describe --tags --always 2>/dev/null || echo dev)" \
+    go build -ldflags "-s -w -X main.version=${VERSION}" \
     -o tetherdb ./cmd/tetherdb
 
 FROM scratch
