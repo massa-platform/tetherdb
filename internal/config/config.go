@@ -69,7 +69,11 @@ type ConnectorConfig struct {
 	Driver string `toml:"driver"`
 	// Host is the database server hostname or IP.
 	Host string `toml:"host"`
+	// Instance is the named SQL Server instance (e.g. "PRIMAVERAV10").
+	// Leave empty for the default instance. When set, Port is ignored.
+	Instance string `toml:"instance"`
 	// Port is the database server TCP port. Defaults to 1433 for SQL Server.
+	// Ignored when Instance is set.
 	Port int `toml:"port"`
 	// Database is the target database name.
 	Database string `toml:"database"`

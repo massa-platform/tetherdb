@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"strconv"
 	"time"
 
 	_ "github.com/microsoft/go-mssqldb" // registers the "sqlserver" driver
@@ -19,7 +18,12 @@ import (
 type Config struct {
 	// Host is the SQL Server hostname or IP address. Must be non-empty.
 	Host string
+	// Instance is the named SQL Server instance (e.g. "PRIMAVERAV10").
+	// When set, Port is ignored — named instances use dynamic port negotiation
+	// via SQL Server Browser service. Leave empty for default instance.
+	Instance string
 	// Port is the TCP port. Must be between 1 and 65535. Defaults to 1433.
+	// Ignored when Instance is set.
 	Port int
 	// Database is the target database name. Must be non-empty.
 	Database string
@@ -113,12 +117,16 @@ func validateConfig(cfg Config) error {
 	if cfg.Database == "" {
 		return connErr(ErrInvalidConfig, "database must not be empty", nil)
 	}
-	port := cfg.Port
-	if port == 0 {
-		port = 1433
-	}
-	if port < 1 || port > 65535 {
-		return connErr(ErrInvalidConfig, fmt.Sprintf("port %d out of range 1-65535", port), nil)
+	// Port validation only applies to default instances; named instances use
+	// SQL Server Browser dynamic port negotiation and ignore Port.
+	if cfg.Instance == "" {
+		port := cfg.Port
+		if port == 0 {
+			port = 1433
+		}
+		if port < 1 || port > 65535 {
+			return connErr(ErrInvalidConfig, fmt.Sprintf("port %d out of range 1-65535", port), nil)
+		}
 	}
 	if cfg.Auth != "sqlserver" && cfg.Auth != "windows" {
 		return connErr(ErrInvalidConfig, fmt.Sprintf("auth must be 'sqlserver' or 'windows', got %q", cfg.Auth), nil)
@@ -138,22 +146,39 @@ func validateConfig(cfg Config) error {
 }
 
 // buildDSN constructs the mssqldb connection string with the password redacted in logs.
+//
+// Named instances (cfg.Instance != "") use SQL Server Browser dynamic port negotiation —
+// the instance name is passed as a query parameter and Port is omitted from the DSN.
+// Default instances use an explicit port (defaulting to 1433).
 func buildDSN(cfg Config) string {
+	// Build the redacted DSN for logging — never include the password.
+	redacted := fmt.Sprintf("sqlserver://%s@%s", cfg.User, cfg.Host)
+	if cfg.Instance != "" {
+		redacted += `\` + cfg.Instance
+	}
+	redacted += "/" + cfg.Database
+	slog.Default().Info("sqlserver: connecting", "dsn", redacted)
+
+	if cfg.Instance != "" {
+		// Named instance: omit port, pass instance via query param.
+		if cfg.Auth == "windows" {
+			return fmt.Sprintf("sqlserver://%s?database=%s&instance=%s&integrated+security=true",
+				cfg.Host, cfg.Database, cfg.Instance)
+		}
+		return fmt.Sprintf("sqlserver://%s:%s@%s?database=%s&instance=%s",
+			cfg.User, cfg.Password, cfg.Host, cfg.Database, cfg.Instance)
+	}
+
 	port := cfg.Port
 	if port == 0 {
 		port = 1433
 	}
-
-	// Log the redacted form before building the real DSN.
-	slog.Default().Info("sqlserver: connecting",
-		"dsn", fmt.Sprintf("sqlserver://%s@%s/%s", cfg.User, cfg.Host, cfg.Database))
-
 	if cfg.Auth == "windows" {
-		return fmt.Sprintf("sqlserver://%s:%d?database=%s&integrated security=true",
+		return fmt.Sprintf("sqlserver://%s:%d?database=%s&integrated+security=true",
 			cfg.Host, port, cfg.Database)
 	}
-	return fmt.Sprintf("sqlserver://%s:%s@%s:%s?database=%s",
-		cfg.User, cfg.Password, cfg.Host, strconv.Itoa(port), cfg.Database)
+	return fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s",
+		cfg.User, cfg.Password, cfg.Host, port, cfg.Database)
 }
 
 // retryWithBackoff runs fn, retrying on error with exponential backoff.

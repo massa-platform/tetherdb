@@ -152,6 +152,7 @@ func (p *program) Start(s service.Service) error {
 		ctx := context.Background()
 		conn, err := sqlserver.New(ctx, sqlserver.Config{
 			Host:     cfg.Connector.Host,
+			Instance: cfg.Connector.Instance,
 			Port:     cfg.Connector.Port,
 			Database: cfg.Connector.Database,
 			Auth:     cfg.Connector.Auth,
