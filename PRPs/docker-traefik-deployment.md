@@ -1,6 +1,6 @@
 # PRP: Docker + Traefik Deployment for Sink Node
 
-**Status:** draft
+**Status:** approved (revised)
 **Spec ref:** deployment / infrastructure
 **Branch:** TBD
 
@@ -8,10 +8,17 @@
 
 ## Goal
 
-Package the tetherdb sink node and its PostgreSQL database as a Docker Compose stack.
-Traefik acts as the TLS-terminating reverse proxy — it provisions a Let's Encrypt cert
-for `tetherdb.dafifi.net` and forwards WebSocket connections to the tetherdb container
-over plain HTTP internally. tetherdb never holds cert files in this deployment model.
+Publish tetherdb as a Docker image on GitHub Container Registry (`ghcr.io/massa-platform/tetherdb`).
+The binary stays infrastructure-agnostic — Docker is one way to run it, not the only way.
+Users pull the image and write their own compose file for their environment.
+
+The repo ships a `docker-compose.example.yml` and example configs as documentation,
+but does not own the user's deployment. Traefik (or any other TLS terminator) is the
+user's concern — tetherdb just needs to listen on a plain port.
+
+For the reference deployment (`tetherdb.dafifi.net`): Traefik terminates TLS, provisions
+a Let's Encrypt cert, and forwards WebSocket connections to the tetherdb container over
+plain HTTP internally.
 
 ---
 
@@ -48,20 +55,24 @@ already accepts plain connections when no TLS config is provided.
 ## Files to create or modify
 
 ```
-docker-compose.yml                  — new: tetherdb + postgres + traefik services
-traefik/traefik.yml                 — new: static Traefik config (entrypoints, ACME)
-traefik/acme.json                   — new: empty placeholder (chmod 600, gitignored)
-config/tetherdb-sink.toml.example   — new: example sink node TOML config
-internal/config/config.go           — modify: make tls_cert/tls_key optional
-internal/config/config_test.go      — modify: add tests for no-TLS listen mode
-.gitignore                          — modify: add traefik/acme.json
+Dockerfile                              — new: two-stage scratch build (already done)
+docker-compose.example.yml              — rename from docker-compose.yml; not used by CI
+traefik/traefik.yml                     — keep: reference Traefik static config
+traefik/acme.json                       — keep: empty placeholder (chmod 600, gitignored)
+config/tetherdb-sink.toml              — keep: example sink TOML
+.env.example                            — keep: credential placeholders
+.gitignore                              — keep
+.github/workflows/release.yml          — modify: add docker job (build + push to ghcr.io on tag)
+internal/config/config.go              — already done (no-TLS listen mode)
+internal/config/config_test.go         — already done
 ```
 
 ---
 
-## docker-compose.yml
+## docker-compose.example.yml
 
-Three services: `traefik`, `tetherdb`, `postgres`.
+Three services: `traefik`, `tetherdb`, `postgres`. This is a reference example only —
+users copy and adapt it. It is not run by CI.
 
 **traefik:**
 - Image: `traefik:v3`
@@ -71,7 +82,7 @@ Three services: `traefik`, `tetherdb`, `postgres`.
 - No labels — Traefik reads its own static config from `traefik.yml`.
 
 **tetherdb:**
-- Image: built from a minimal `Dockerfile` (scratch-based, copies binary)
+- Image: `ghcr.io/massa-platform/tetherdb:latest` (or a specific tag)
 - Exposes port `8443` internally (not published to host)
 - Mounts: `./config/tetherdb-sink.toml:/etc/tetherdb/tetherdb.toml:ro`
 - Labels: Traefik router for host `tetherdb.dafifi.net`, WebSocket middleware enabled,
@@ -162,6 +173,22 @@ sslmode  = "disable"           # Internal Docker network — no TLS needed to Po
 ```
 
 ---
+
+## Release workflow change
+
+Add a `docker` job to `.github/workflows/release.yml` that runs **only on tag pushes**
+(`refs/tags/v*`). It must not run on branch pushes.
+
+Steps:
+1. Checkout with `fetch-depth: 0` (same as build job — needed for `git describe`).
+2. Log in to `ghcr.io` using `GITHUB_TOKEN` (no extra secret needed).
+3. Extract tags via `docker/metadata-action`: `ghcr.io/massa-platform/tetherdb:v1.2.3`
+   and `ghcr.io/massa-platform/tetherdb:latest`.
+4. Build and push with `docker/build-push-action`, passing `version` build-arg so
+   `Dockerfile` can inject it via `--ldflags`.
+5. `permissions: packages: write` on the job (required for ghcr.io push).
+
+The `docker` job does not depend on the `build` job — they run in parallel.
 
 ## Config validator change
 

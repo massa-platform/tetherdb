@@ -329,6 +329,12 @@ internal/config/config_test.go      — 4 new tests: ListenNoTLS, ListenPartialT
 
 None new. DECISION-011 (data_dir persistence) remains open — deferred to first production deploy.
 
+### REVISION (same session)
+
+Decoupled tetherdb from Docker Compose. Image published to ghcr.io on tag push.
+docker-compose.yml → docker-compose.example.yml (reference only, not run by CI).
+Dockerfile updated to accept VERSION build-arg.
+
 ### STILL OPEN AT CLOSE
 
 - DECISION-011: data_dir Docker volume vs ephemeral — deferred.
