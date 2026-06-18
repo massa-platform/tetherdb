@@ -160,9 +160,41 @@ and management API are all future PRPs per the spec's implementation plan (steps
 
 ---
 
-## SESSION 4 — 2026-06-18 — Named SQL Server Instance Fix — open
+## SESSION 4 — 2026-06-18 — Named SQL Server Instance Fix — closed
 
 Branch: claude/quirky-edison-kne9yf
+
+### WHAT WAS DONE
+
+Fixed named SQL Server instance support in the connector DSN builder. Added `Instance`
+field to `sqlserver.Config` and `config.ConnectorConfig`. When `instance` is set in
+TOML, the DSN omits the port and appends `?instance=NAME` — required for named instances
+which use SQL Server Browser dynamic port negotiation rather than a fixed port.
+
+### FILES CREATED OR MODIFIED
+
+internal/connector/sqlserver/sqlserver.go  — Instance field in Config, buildDSN updated, validateConfig skips port check for named instances
+internal/config/config.go                  — Instance field in ConnectorConfig
+cmd/tetherdb/main.go                       — Instance passed through to sqlserver.Config
+
+### TESTS WRITTEN
+
+None new — existing 12 sqlserver unit tests continue to pass. Integration test
+against a real named instance is required to fully validate.
+
+### DECISIONS MADE
+
+None new.
+
+### STILL OPEN AT CLOSE
+
+User needs to update C:\tetherdb\tetherdb.toml:
+- Set `host = "SRV01-MTA"` (without the instance part)
+- Add `instance = "PRIMAVERAV10"`
+- Replace `YOUR_DATABASE_NAME` with the actual database name
+- Fill in the correct table names in `connector.publish.tables`
+
+Then download the new binary from the next release tag or CI artifact and replace the exe.
 
 ---
 
@@ -176,5 +208,6 @@ Completed so far (all on branch claude/quirky-edison-kne9yf, PR #2):
 - SQL Server connector (Reader) — internal/connector/sqlserver/
 - Node entrypoint + config loader + service wrapper — cmd/tetherdb/, internal/config/
 - GitHub Actions release workflow — .github/workflows/release.yml
+- Named SQL Server instance fix — internal/connector/sqlserver/sqlserver.go, internal/config/config.go
 
 Next feature: PostgreSQL Writer connector (spec §5.5, implementation plan step 2). Write a PRP first.
