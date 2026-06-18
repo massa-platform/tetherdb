@@ -14,6 +14,7 @@ import (
 
 	"github.com/kardianos/service"
 	"github.com/massa-platform/tetherdb/internal/config"
+	"github.com/massa-platform/tetherdb/internal/connector/postgres"
 	"github.com/massa-platform/tetherdb/internal/connector/sqlserver"
 )
 
@@ -169,6 +170,30 @@ func (p *program) Start(s service.Service) error {
 			return fmt.Errorf("main: connector probe: %w", err)
 		}
 		slog.Info("connector probe succeeded")
+	}
+
+	if cfg.HasSink() {
+		slog.Info("probing sink", "dsn", cfg.RedactedSinkDSN())
+
+		ctx := context.Background()
+		sink, err := postgres.New(ctx, postgres.Config{
+			DSN:      cfg.Sink.DSN,
+			Host:     cfg.Sink.Host,
+			Port:     cfg.Sink.Port,
+			Database: cfg.Sink.Database,
+			Username: cfg.Sink.Username,
+			Password: cfg.SinkPassword(),
+			SSLMode:  cfg.Sink.SSLMode,
+		})
+		if err != nil {
+			return fmt.Errorf("main: create sink: %w", err)
+		}
+		defer sink.Close()
+
+		if err := sink.Probe(ctx); err != nil {
+			return fmt.Errorf("main: sink probe: %w", err)
+		}
+		slog.Info("sink probe succeeded")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

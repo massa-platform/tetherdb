@@ -1,0 +1,19 @@
+[node]
+name     = "sink-prod"
+data_dir = "/var/lib/tetherdb"
+
+[management]
+address = "127.0.0.1:8080"
+
+[listen]
+address = "0.0.0.0:8443"
+# tls_cert and tls_key are intentionally absent — Traefik terminates TLS.
+
+[sink]
+driver   = "postgres"
+host     = "postgres"
+port     = 5432
+database = "erp_mirror"
+username = "${PG_USER}"
+password = "${PG_PASS}"
+sslmode  = "disable"

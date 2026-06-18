@@ -1,0 +1,65 @@
+services:
+  traefik:
+    image: traefik:v3
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      - ./traefik/acme.json:/acme.json
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - web
+
+  tetherdb:
+    build: .
+    restart: unless-stopped
+    environment:
+      PG_USER: ${PG_USER}
+      PG_PASS: ${PG_PASS}
+    volumes:
+      - ./config/tetherdb-sink.toml:/etc/tetherdb/tetherdb.toml:ro
+      - tetherdb-data:/var/lib/tetherdb
+    networks:
+      - web
+      - internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tetherdb.rule=Host(`tetherdb.dafifi.net`)"
+      - "traefik.http.routers.tetherdb.entrypoints=websecure"
+      - "traefik.http.routers.tetherdb.tls.certresolver=letsencrypt"
+      - "traefik.http.services.tetherdb.loadbalancer.server.port=8443"
+      # Preserve WebSocket upgrade headers through the proxy.
+      - "traefik.http.middlewares.tetherdb-ws.headers.customrequestheaders.Connection=Upgrade"
+      - "traefik.http.middlewares.tetherdb-ws.headers.customrequestheaders.Upgrade=websocket"
+      - "traefik.http.routers.tetherdb.middlewares=tetherdb-ws"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASS}
+      POSTGRES_DB: ${PG_DB:-erp_mirror}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB:-erp_mirror}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+networks:
+  web:
+  internal:
+    internal: true
+
+volumes:
+  pgdata:
+  tetherdb-data:

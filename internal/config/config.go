@@ -26,11 +26,35 @@ var envVarPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 // All fields are populated from a TOML file via Load. At least one of Connector
 // or Listen must be non-nil after loading — a node with neither does nothing.
 type Config struct {
-	Node        NodeConfig        `toml:"node"`
-	Listen      *ListenConfig     `toml:"listen"`
-	Management  ManagementConfig  `toml:"management"`
-	Connector   *ConnectorConfig  `toml:"connector"`
+	Node        NodeConfig         `toml:"node"`
+	Listen      *ListenConfig      `toml:"listen"`
+	Management  ManagementConfig   `toml:"management"`
+	Connector   *ConnectorConfig   `toml:"connector"`
+	Sink        *SinkConfig        `toml:"sink"`
 	Connections []ConnectionConfig `toml:"connections"`
+}
+
+// SinkConfig holds target database connector configuration for sink nodes.
+//
+// Present only on nodes that write to a database. Either DSN or explicit
+// fields (host, port, database, username, password) must be provided.
+type SinkConfig struct {
+	// Driver identifies the database type. Only "postgres" is supported in v1.
+	Driver string `toml:"driver"`
+	// DSN is a raw postgres:// connection string. Used when explicit fields are empty.
+	DSN string `toml:"dsn"`
+	// Host is the Postgres hostname or IP.
+	Host string `toml:"host"`
+	// Port is the Postgres TCP port. Defaults to 5432.
+	Port int `toml:"port"`
+	// Database is the target database name.
+	Database string `toml:"database"`
+	// Username is the login name.
+	Username string `toml:"username"`
+	// Password is the login password. Never logged.
+	Password string `toml:"password"`
+	// SSLMode controls TLS behaviour. Defaults to "require".
+	SSLMode string `toml:"sslmode"`
 }
 
 // NodeConfig holds identity and local state configuration.
@@ -176,6 +200,11 @@ func (c *Config) Validate() error {
 			return err
 		}
 	}
+	if c.Sink != nil {
+		if err := validateSink(*c.Sink); err != nil {
+			return err
+		}
+	}
 	if err := validateConnections(c.Connections, c.Connector); err != nil {
 		return err
 	}
@@ -223,11 +252,16 @@ func validateListen(l ListenConfig) error {
 	if _, _, err := net.SplitHostPort(l.Address); err != nil {
 		return fmt.Errorf("config: listen.address %q is not a valid host:port: %w", l.Address, err)
 	}
+	// Both empty → no-TLS mode; Traefik (or similar) terminates TLS upstream.
+	if l.TLSCert == "" && l.TLSKey == "" {
+		return nil
+	}
+	// Partial TLS config is always an error.
 	if l.TLSCert == "" {
-		return fmt.Errorf("config: listen.tls_cert must not be empty")
+		return fmt.Errorf("config: listen.tls_cert must not be empty when listen.tls_key is set")
 	}
 	if l.TLSKey == "" {
-		return fmt.Errorf("config: listen.tls_key must not be empty")
+		return fmt.Errorf("config: listen.tls_key must not be empty when listen.tls_cert is set")
 	}
 	if _, err := os.Stat(l.TLSCert); err != nil {
 		return fmt.Errorf("config: listen.tls_cert %q not found: %w", l.TLSCert, err)
@@ -405,6 +439,65 @@ func (c *Config) IsSinkNode() bool {
 //	if cfg.IsRelayNode() { ... }
 func (c *Config) IsRelayNode() bool {
 	return c.Connector != nil && c.Listen != nil
+}
+
+// validateSink checks that the sink config has a supported driver and either
+// a raw DSN or the required explicit fields.
+func validateSink(s SinkConfig) error {
+	if s.Driver != "postgres" {
+		return fmt.Errorf("config: sink.driver %q is not supported; only \"postgres\" is supported in v1", s.Driver)
+	}
+	if s.DSN != "" {
+		return nil
+	}
+	if s.Host == "" {
+		return fmt.Errorf("config: sink.host must not be empty when sink.dsn is not set")
+	}
+	if s.Database == "" {
+		return fmt.Errorf("config: sink.database must not be empty when sink.dsn is not set")
+	}
+	if s.Username == "" {
+		return fmt.Errorf("config: sink.username must not be empty when sink.dsn is not set")
+	}
+	return nil
+}
+
+// HasSink reports whether this node has a target database sink configured.
+//
+// Example:
+//
+//	if cfg.HasSink() {
+//	    // start Postgres writer
+//	}
+func (c *Config) HasSink() bool { return c.Sink != nil }
+
+// SinkPassword returns the sink password without logging it.
+// Callers must ensure the return value is never passed to a logger.
+//
+// Example:
+//
+//	pass := cfg.SinkPassword()
+func (c *Config) SinkPassword() string {
+	if c.Sink == nil {
+		return ""
+	}
+	return c.Sink.Password
+}
+
+// RedactedSinkDSN returns a loggable sink connection string with the password omitted.
+//
+// Example:
+//
+//	log.Info("connecting sink", "dsn", cfg.RedactedSinkDSN())
+func (c *Config) RedactedSinkDSN() string {
+	if c.Sink == nil {
+		return ""
+	}
+	if c.Sink.DSN != "" {
+		// Redact the password from the raw DSN by replacing the userinfo segment.
+		return "(raw DSN — redacted)"
+	}
+	return fmt.Sprintf("postgres://%s@%s/%s", c.Sink.Username, c.Sink.Host, c.Sink.Database)
 }
 
 // redactedAddress strips the password from a connection string for logging.
