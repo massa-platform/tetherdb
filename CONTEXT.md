@@ -342,6 +342,12 @@ Dockerfile updated to accept VERSION build-arg.
 
 ---
 
+## SESSION 8 — 2026-06-19 — WebSocket Transport Layer — open
+
+Branch: claude/sleepy-mccarthy-bpkmvl
+
+---
+
 ## NEXT SESSION START POINT
 
 Step 1: append a new session entry to CONTEXT.md with state `open` and the current branch name. Commit it before anything else.
