@@ -342,7 +342,77 @@ Dockerfile updated to accept VERSION build-arg.
 
 ---
 
+## SESSION 8 — 2026-06-19 — WebSocket Transport Layer — closed
+
+Branch: claude/sleepy-mccarthy-bpkmvl
+
+### WHAT WAS DONE
+
+Implemented the WebSocket transport layer per PRPs/websocket-transport.md (approved PRP).
+Added gorilla/websocket v1.5.3. All 12 PRP-specified tests pass. `go build ./...`,
+`go test ./...`, and `go vet ./...` all pass clean with CGO_ENABLED=0.
+
+### FILES CREATED OR MODIFIED
+
+internal/transport/messages.go     — Hello, HelloAck, ChangeBatch, Ack, Nack types + decode()
+internal/transport/conn.go         — Conn wrapping *websocket.Conn with typed Send/Recv
+internal/transport/dialer.go       — Dialer: dial, handshake, reconnect loop, in-flight batch re-queue
+internal/transport/listener.go     — Listener: HTTP/WebSocket upgrade, handshake validation, ConnHandler dispatch
+internal/transport/transport_test.go — 12 unit tests (httptest + gorilla websocket, no real TLS)
+go.mod / go.sum                    — github.com/gorilla/websocket v1.5.3 added
+
+### TESTS WRITTEN
+
+- TestConn_SendRecvHello
+- TestConn_SendRecvChangeBatch
+- TestConn_SendRecvAck
+- TestConn_SendRecvNack
+- TestConn_UnknownMessageType
+- TestHandshake_Accepted
+- TestHandshake_Rejected
+- TestDialer_SendBatchAck
+- TestDialer_SendBatchNack
+- TestDialer_ReconnectsOnDrop
+- TestDialer_BackoffOnDialFailure
+- TestListener_MultipleConnections
+
+### DECISIONS MADE
+
+None new. DECISION-012 (ChangeBatch max size cap) remains deferred to pipeline engine PRP.
+
+### KNOWN LIMITATIONS
+
+- transport_test.go is 563 lines — exceeds the 300-line FILE SIZE RULE. A split into
+  helpers_test.go / conn_test.go / handshake_test.go / dialer_test.go / listener_test.go
+  was proposed to the user and is pending approval.
+
+### STILL OPEN AT CLOSE
+
+- Split transport_test.go (pending user approval per FILE SIZE RULE).
+- Pipeline engine wiring (Reader → Dialer, Listener → Writer) — future PRP.
+- SQLite state layer (cursor persistence) — future PRP.
+- Management API — future PRP.
+
+---
+
 ## NEXT SESSION START POINT
+
+Step 1: append a new session entry to CONTEXT.md with state `open` and the current branch name. Commit it before anything else.
+
+Then read CLAUDE.md, MEMORY.md, DECISIONS.md in that order.
+
+Completed so far:
+- SQL Server connector (Reader) — internal/connector/sqlserver/ [claude/quirky-edison-kne9yf]
+- Node entrypoint + config loader + service wrapper — cmd/tetherdb/, internal/config/ [claude/quirky-edison-kne9yf]
+- GitHub Actions release workflow — .github/workflows/release.yml [claude/quirky-edison-kne9yf]
+- Named SQL Server instance + URL encoding fix — production node running on SRV01-MTA [claude/quirky-edison-kne9yf]
+- PostgreSQL Writer connector (Writer) — internal/connector/postgres/ [claude/intelligent-archimedes-r0iia8]
+- Docker + Traefik deployment — Dockerfile, docker-compose.example.yml [claude/intelligent-archimedes-r0iia8]
+- WebSocket transport layer — internal/transport/ [claude/sleepy-mccarthy-bpkmvl]
+
+Next: split transport_test.go (pending approval), then pipeline engine PRP (Reader → Dialer → Listener → Writer wiring with SQLite cursor state).
+
+---
 
 Step 1: append a new session entry to CONTEXT.md with state `open` and the current branch name. Commit it before anything else.
 
